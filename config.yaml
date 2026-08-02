@@ -1,0 +1,34 @@
+sip:
+  trunk_host: "sip.trunk.provider.com"
+  trunk_port: 5060
+  username: "sip_user"
+  password: "sip_password"
+  display_name: "SIP Client"
+  user_agent: "SIP-MQTT-Client/0.1"
+  register: true
+  register_expiry: 3600
+
+mqtt:
+  broker_host: "localhost"
+  broker_port: 1883
+  username: ""
+  password: ""
+  client_id: "sip-client-001"
+  topics:
+    incoming_call: "sip/call/incoming"
+    call_status: "sip/call/status"
+    call_control: "sip/call/control"
+    dtmf: "sip/dtmf"
+    audio_control: "sip/audio/control"
+
+audio:
+  sample_rate: 8000
+  channels: 1
+  chunk_size: 160
+  pulse_server: "localhost"
+  sink_name: "sip_output"
+  source_name: "sip_input"
+
+logging:
+  level: "INFO"
+  file: "sip-mqtt-client.log"
