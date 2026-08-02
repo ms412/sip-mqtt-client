@@ -28,6 +28,9 @@ class TestSIPMQTTClient:
                 "sample_rate": 8000,
                 "channels": 1,
                 "chunk_size": 160,
+                "pulse_server": "localhost",
+                "sink_name": "sip_output",
+                "source_name": "sip_input",
             },
         }
 
