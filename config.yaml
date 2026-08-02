@@ -20,6 +20,11 @@ mqtt:
     call_control: "sip/call/control"
     dtmf: "sip/dtmf"
     audio_control: "sip/audio/control"
+  lwt:
+    topic: "sip/status"
+    message: "offline"
+    qos: 1
+    retain: true
 
 audio:
   sample_rate: 8000

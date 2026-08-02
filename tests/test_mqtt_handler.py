@@ -13,6 +13,10 @@ class TestMQTTHandler:
             username="testuser",
             password="testpass",
             client_id="test-client-001",
+            will_topic="sip/status",
+            will_message="offline",
+            will_qos=1,
+            will_retain=True,
         )
         return handler
 
@@ -173,3 +177,84 @@ class TestMQTTHandler:
         timestamp = mqtt_handler._get_timestamp()
         assert isinstance(timestamp, float)
         assert timestamp > 0
+
+    def test_init_lwt_defaults(self):
+        handler = MQTTHandler(
+            broker_host="localhost",
+            broker_port=1883,
+            client_id="test-client",
+        )
+        assert handler.will_topic == "sip/status"
+        assert handler.will_message == "offline"
+        assert handler.will_qos == 1
+        assert handler.will_retain is True
+
+    def test_init_lwt_custom(self):
+        handler = MQTTHandler(
+            broker_host="localhost",
+            broker_port=1883,
+            client_id="test-client",
+            will_topic="device/status",
+            will_message="unavailable",
+            will_qos=2,
+            will_retain=False,
+        )
+        assert handler.will_topic == "device/status"
+        assert handler.will_message == "unavailable"
+        assert handler.will_qos == 2
+        assert handler.will_retain is False
+
+    def test_start_sets_will(self, mqtt_handler, mock_mqtt_client):
+        mqtt_handler.start()
+        mock_mqtt_client.will_set.assert_called_with(
+            topic="sip/status",
+            payload="offline",
+            qos=1,
+            retain=True,
+        )
+
+    def test_on_connect_publishes_online(self, mqtt_handler, mock_mqtt_client):
+        mqtt_handler.set_topics({"call_status": "sip/call/status"})
+        mqtt_handler._on_connect(mock_mqtt_client, None, None, 0)
+        mock_mqtt_client.publish.assert_called()
+        call_args = mock_mqtt_client.publish.call_args
+        assert call_args[0][0] == "sip/status"
+        payload = json.loads(call_args[0][1])
+        assert payload["status"] == "online"
+        assert payload["client_id"] == "test-client-001"
+        assert "timestamp" in payload
+
+    def test_set_online(self, mqtt_handler, mock_mqtt_client):
+        mqtt_handler.client = mock_mqtt_client
+        mock_mqtt_client.is_connected.return_value = True
+        mqtt_handler.set_online()
+        mock_mqtt_client.publish.assert_called()
+        call_args = mock_mqtt_client.publish.call_args
+        assert call_args[0][0] == "sip/status"
+        payload = json.loads(call_args[0][1])
+        assert payload["status"] == "online"
+
+    def test_set_offline(self, mqtt_handler, mock_mqtt_client):
+        mqtt_handler.client = mock_mqtt_client
+        mock_mqtt_client.is_connected.return_value = True
+        mqtt_handler.set_offline()
+        mock_mqtt_client.publish.assert_called()
+        call_args = mock_mqtt_client.publish.call_args
+        assert call_args[0][0] == "sip/status"
+        payload = json.loads(call_args[0][1])
+        assert payload["status"] == "offline"
+        assert payload["reason"] == "graceful_shutdown"
+
+    def test_set_offline_not_connected(self, mqtt_handler, mock_mqtt_client):
+        mqtt_handler.client = mock_mqtt_client
+        mock_mqtt_client.is_connected.return_value = False
+        mqtt_handler.set_offline()
+        mock_mqtt_client.publish.assert_not_called()
+
+    def test_publish_status_retain_flag(self, mqtt_handler, mock_mqtt_client):
+        mqtt_handler.client = mock_mqtt_client
+        mock_mqtt_client.is_connected.return_value = True
+        mqtt_handler._publish_status("online")
+        call_args = mock_mqtt_client.publish.call_args
+        assert call_args[1]["retain"] is True
+        assert call_args[1]["qos"] == 1

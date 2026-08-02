@@ -44,12 +44,17 @@ class SIPMQTTClient:
         self.sip_client.on_dtmf = self._on_dtmf
 
         mqtt_config = self.config["mqtt"]
+        lwt_config = mqtt_config.get("lwt", {})
         self.mqtt_handler = MQTTHandler(
             broker_host=mqtt_config["broker_host"],
             broker_port=mqtt_config["broker_port"],
             username=mqtt_config.get("username", ""),
             password=mqtt_config.get("password", ""),
             client_id=mqtt_config["client_id"],
+            will_topic=lwt_config.get("topic", "sip/status"),
+            will_message=lwt_config.get("message", "offline"),
+            will_qos=lwt_config.get("qos", 1),
+            will_retain=lwt_config.get("retain", True),
         )
         self.mqtt_handler.set_topics(mqtt_config["topics"])
         self.mqtt_handler.on_call_control = self._on_call_control
@@ -88,6 +93,7 @@ class SIPMQTTClient:
         if self.current_call and self.current_call.active:
             self.sip_client.hangup_call()
 
+        self.mqtt_handler.set_offline()
         self.sip_client.stop()
         self.mqtt_handler.stop()
         self.audio_handler.stop()

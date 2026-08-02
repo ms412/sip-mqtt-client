@@ -15,12 +15,20 @@ class MQTTHandler:
         username: str = "",
         password: str = "",
         client_id: str = "sip-client-001",
+        will_topic: str = "sip/status",
+        will_message: str = "offline",
+        will_qos: int = 1,
+        will_retain: bool = True,
     ):
         self.broker_host = broker_host
         self.broker_port = broker_port
         self.username = username
         self.password = password
         self.client_id = client_id
+        self.will_topic = will_topic
+        self.will_message = will_message
+        self.will_qos = will_qos
+        self.will_retain = will_retain
         self.client: Optional[mqtt.Client] = None
         self.topics: Dict[str, str] = {}
         self.running = False
@@ -42,6 +50,13 @@ class MQTTHandler:
         if self.username and self.password:
             self.client.username_pw_set(self.username, self.password)
 
+        self.client.will_set(
+            topic=self.will_topic,
+            payload=self.will_message,
+            qos=self.will_qos,
+            retain=self.will_retain,
+        )
+
         self.running = True
         self.client.connect(self.broker_host, self.broker_port, 60)
         self._thread = threading.Thread(target=self.client.loop_forever, daemon=True)
@@ -62,8 +77,25 @@ class MQTTHandler:
             for topic in self.topics.values():
                 client.subscribe(topic)
                 logger.info(f"Subscribed to {topic}")
+            self._publish_status("online")
         else:
             logger.error(f"Failed to connect to MQTT broker, result code: {rc}")
+
+    def _publish_status(self, status: str) -> None:
+        """Publish device status to LWT topic."""
+        if self.client and self.client.is_connected():
+            message = {
+                "status": status,
+                "client_id": self.client_id,
+                "timestamp": self._get_timestamp(),
+            }
+            self.client.publish(
+                self.will_topic,
+                json.dumps(message),
+                qos=self.will_qos,
+                retain=self.will_retain,
+            )
+            logger.debug(f"Published status '{status}' to {self.will_topic}")
 
     def _on_message(self, client, userdata, msg) -> None:
         topic = msg.topic
@@ -91,6 +123,27 @@ class MQTTHandler:
                 client.reconnect()
             except Exception as e:
                 logger.error(f"Reconnection failed: {e}")
+
+    def set_online(self) -> None:
+        """Manually set device status to online."""
+        self._publish_status("online")
+
+    def set_offline(self) -> None:
+        """Manually set device status to offline before graceful shutdown."""
+        if self.client and self.client.is_connected():
+            message = {
+                "status": "offline",
+                "client_id": self.client_id,
+                "timestamp": self._get_timestamp(),
+                "reason": "graceful_shutdown",
+            }
+            self.client.publish(
+                self.will_topic,
+                json.dumps(message),
+                qos=self.will_qos,
+                retain=self.will_retain,
+            )
+            logger.debug(f"Published offline status to {self.will_topic}")
 
     def publish(self, topic: str, message: Dict[str, Any]) -> None:
         if self.client and self.client.is_connected():
